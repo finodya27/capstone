@@ -1,0 +1,29 @@
+# Web frameworks
+Flask==2.3.3
+FastAPI==0.103.1
+uvicorn==0.23.2
+flask-cors==6.0.1
+
+# Drone communication
+pymavlink==2.4.49
+dronekit==2.9.2
+future==1.0.0
+
+# Computer vision
+opencv-python==4.9.0.80
+
+# Firebase
+firebase-admin==6.2.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Authentication
+PyJWT==2.8.0
+bcrypt==4.1.1
+
+# Database (use only if needed)
+Flask-PyMongo==2.3.0
+
+# Optional utilities
+requests==2.31.0

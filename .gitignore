@@ -1,0 +1,23 @@
+# Virtual Environment
+venv/
+
+# File Konfigurasi Sensitif
+backend/.env
+
+# Kredensial Firebase (sangat penting!)
+backend/firequadsystem-firebase-adminsdk-xxxxx-xxxx.json
+
+# Log atau File Kompilasi
+*.log
+*.pyc
+
+# Folder dependensi Node.js
+frontend/node_modules/
+
+# Build atau distribusi folder dari front-end
+frontend/build/
+frontend/dist/
+
+# macOS atau Windows specific files
+.DS_Store
+Thumbs.db
