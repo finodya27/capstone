@@ -5,56 +5,56 @@ from backend.database.models import DroneData
 from datetime import datetime
 
 telemetry_blueprint = Blueprint("telemetry", __name__)
-pixhawk = PixhawkHelper(device="COM3", baud=57600)
+
+# Gunakan koneksi UDP dari MAVProxy, bukan langsung COM3
+# MAVProxy command: mavproxy.py --master=COM3 --baudrate 57600 --out=udp:127.0.0.1:14550 --out=udp:127.0.0.1:14551
+pixhawk = PixhawkHelper(device="udp:127.0.0.1:14551", baud=57600)
+
 
 # Fungsi untuk mengambil data ketinggian dari sonar (sonarrange)
 def get_sonar_range(telemetry):
-    # Ambil nilai 'sonarrange' dari telemetry
     if "sonarrange" in telemetry:
         return telemetry["sonarrange"]
     else:
-        # Jika tidak ada sonarrange, kembalikan nilai default atau ketinggian dari GPS
-        return telemetry["altitude"]  # fallback ke altitude dari GPS jika sonar tidak tersedia
+        return telemetry.get("altitude", None)  # fallback ke GPS altitude jika sonar tidak ada
+
 
 # Fungsi util: Membuat objek DroneData dari hasil Pixhawk dan sonar
 def create_drone_data_from_pixhawk(telemetry):
-    # Ambil ketinggian dari sonar (sonarrange) atau fallback ke GPS jika tidak ada
     sonar_altitude = get_sonar_range(telemetry)
 
-    # Membuat objek DroneData dengan menggunakan data telemetry Pixhawk dan ketinggian dari sonar
     return DroneData(
-        battery=telemetry["battery"],
-        altitude=sonar_altitude,  # Gantikan dengan data dari sonar atau rangefinder
-        heading=telemetry["heading"],
-        airspeed=telemetry["airspeed"],
-        groundspeed=telemetry["groundspeed"],
+        battery=telemetry.get("battery"),
+        altitude=sonar_altitude,
+        heading=telemetry.get("heading"),
+        airspeed=telemetry.get("airspeed"),
+        groundspeed=telemetry.get("groundspeed"),
         attitude={
-            "roll": telemetry["attitude"]["roll"],
-            "pitch": telemetry["attitude"]["pitch"],
-            "yaw": telemetry["attitude"]["yaw"],
-        },
+            "roll": telemetry["attitude"].get("roll"),
+            "pitch": telemetry["attitude"].get("pitch"),
+            "yaw": telemetry["attitude"].get("yaw"),
+        } if "attitude" in telemetry else {},
         gps={
-            "latitude": telemetry["gps"]["latitude"],
-            "longitude": telemetry["gps"]["longitude"],
-            "altitude": telemetry["gps"]["altitude"],  # Altitude GPS tetap dipertahankan
-            "fix_type": telemetry["gps"]["fix_type"],
-            "satellites_visible": telemetry["gps"]["satellites_visible"],
-        },
+            "latitude": telemetry["gps"].get("latitude"),
+            "longitude": telemetry["gps"].get("longitude"),
+            "altitude": telemetry["gps"].get("altitude"),
+            "fix_type": telemetry["gps"].get("fix_type"),
+            "satellites_visible": telemetry["gps"].get("satellites_visible"),
+        } if "gps" in telemetry else {},
         fire_detected=False,
         temperature=None,
         wind_direction=None,
         timestamp=datetime.utcnow().isoformat()
     )
 
+
 @telemetry_blueprint.route("/telemetry", methods=["POST"])
 def post_telemetry_data():
     try:
-        telemetry = pixhawk.get_telemetry()  # Ambil data telemetry dari Pixhawk
+        telemetry = pixhawk.get_telemetry()
         if telemetry:
-            # Membuat data drone dari telemetry dan sonar
             drone_data = create_drone_data_from_pixhawk(telemetry)
 
-            # Menyimpan data ke Firebase
             ref = db.reference("/drone_data")
             ref.push().set(drone_data.to_dict())
 
@@ -63,13 +63,10 @@ def post_telemetry_data():
                 "data": drone_data.to_dict()
             }), 200
 
-        # Fallback jika tidak ada data dari Pixhawk
         raise Exception("Pixhawk tidak merespons.")
 
     except Exception as e:
         print("⚠️ Gagal ambil data Pixhawk:", e)
-
-        # Ambil data terakhir dari Firebase jika Pixhawk tidak merespons
         try:
             ref = db.reference("/drone_data")
             data = ref.order_by_key().limit_to_last(1).get()
@@ -82,16 +79,15 @@ def post_telemetry_data():
                 "message": "⚠️ Pixhawk offline. Menampilkan data terakhir dari Firebase.",
                 "data": telemetry
             }), 200
-
         except Exception as db_err:
             return jsonify({"error": f"Gagal mengambil dari Firebase: {db_err}"}), 500
+
 
 @telemetry_blueprint.route("/telemetry/latest", methods=["GET"])
 def get_latest_telemetry():
     try:
         telemetry = pixhawk.get_telemetry()
         if telemetry:
-            # Membuat data drone dari telemetry dan sonar
             drone_data = create_drone_data_from_pixhawk(telemetry)
             return jsonify({
                 "message": "✅ Data terbaru dari Pixhawk.",

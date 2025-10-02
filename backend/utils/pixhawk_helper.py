@@ -5,15 +5,28 @@ import time
 _vehicle_connection = None
 
 class PixhawkHelper:
-    def __init__(self, device="COM3", baud=57600):
+    def __init__(self, device="udp:127.0.0.1:14551", baud=57600):
+        """
+        device bisa berupa:
+          - "COM3" (atau port serial lain, Windows)
+          - "/dev/ttyUSB0" (Linux)
+          - "udp:127.0.0.1:14551" (UDP dari MAVProxy)
+        """
         global _vehicle_connection
         try:
             if _vehicle_connection is None:
-                _vehicle_connection = connect(device, baud=baud, wait_ready=True, timeout=60)
-                print("✅ Terhubung ke Pixhawk pada", device)
+                # Kalau koneksi UDP, DroneKit abaikan baudrate (tidak dipakai)
+                if str(device).startswith("udp:"):
+                    _vehicle_connection = connect(device, wait_ready=True, timeout=60)
+                else:
+                    _vehicle_connection = connect(device, baud=baud, wait_ready=True, timeout=60)
+
+                print(f"✅ Terhubung ke Pixhawk pada {device}")
             else:
                 print("♻️ Menggunakan koneksi Pixhawk yang sudah ada.")
+
             self.vehicle = _vehicle_connection
+
         except Exception as e:
             print("⚠️ Gagal konek ke Pixhawk:", e)
             self.vehicle = None
@@ -26,14 +39,14 @@ class PixhawkHelper:
             location = self.vehicle.location.global_frame
             gps_0 = getattr(self.vehicle, "gps_0", None)
 
-            # Tambahkan pembacaan sonar range
+            # Baca sonar/rangefinder
             sonar_range = None
             if "RNGFND1_DIST" in self.vehicle.parameters:
-                sonar_range = self.vehicle.parameters["RNGFND1_DIST"] / 100.0  # cm to meter
+                sonar_range = self.vehicle.parameters["RNGFND1_DIST"] / 100.0  # cm → m
             elif hasattr(self.vehicle, "rangefinder"):
                 sonar_range = self.vehicle.rangefinder.distance
 
-            # Gunakan sonar jika ada, fallback ke alt biasa
+            # Gunakan sonar kalau ada, fallback ke altitude relatif
             final_altitude = sonar_range if sonar_range is not None else self.vehicle.location.global_relative_frame.alt
 
             data = {

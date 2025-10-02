@@ -10,7 +10,7 @@ function VideoStream({ type }) {
   const streamUrl =
     type === "detection"
       ? "http://127.0.0.1:5000/api/video/detection"
-      : "http://127.0.0.1:5000/api/video/raw";
+      : "https://infomatchacii.web.id/stream.mjpg";
 
   const title = type === "detection" ? "Fire Detection Feed" : "Raw Camera Feed";
   const icon = type === "detection" ? "🔥" : "📹";
@@ -158,8 +158,8 @@ function VideoStream({ type }) {
           src={streamUrl}
           alt={`${type} stream`}
           className={`w-full h-full object-contain transition-opacity duration-300 ${
-            isLoading || isError ? 'opacity-0' : 'opacity-100'
-          }`}
+            isLoading || isError ? "opacity-0" : "opacity-100"
+          } ${type === "raw" ? "rotate-180" : ""}`}   // hanya rotate kalau stream raw
           onLoad={handleImageLoad}
           onError={handleImageError}
         />

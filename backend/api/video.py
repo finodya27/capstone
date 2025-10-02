@@ -2,36 +2,11 @@ from flask import Response, Blueprint
 import cv2
 import requests
 import numpy as np
-import firebase_admin
-from firebase_admin import credentials, db
 
 video_blueprint = Blueprint("video", __name__)
 
-# --- Firebase setup ---
-cred = credentials.Certificate("backend/firebase_key.json")
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://drone-monitoring-system-fef66-default-rtdb.asia-southeast1.firebasedatabase.app/"
-    })
-
-
-def get_latest_stream_url():
-    """Ambil URL terbaru dari Firebase Realtime Database (node 'tunnels')."""
-    ref = db.reference("tunnels")
-    tunnels = ref.get()
-    if not tunnels:
-        return None
-
-    latest_entry = max(
-        tunnels.values(),
-        key=lambda x: x.get("timestamp", "")
-    )
-    url = latest_entry.get("url")
-
-    if url and "action=stream" not in url:
-        url = url.rstrip("/") + "/?action=stream"
-
-    return url
+# URL langsung ke stream (bukan halaman HTML)
+FIXED_STREAM_URL = "https://infomatchacii.web.id/stream.mjpg"
 
 
 def generate_stream(source=0, detection=False, resize=(640, 480)):
@@ -107,12 +82,8 @@ def relay_stream(url, detection=False, resize=(640, 480)):
 
 @video_blueprint.route("/video/raw")
 def video_raw():
-    """Streaming video asli (ambil link terbaru dari Firebase)."""
-    url = get_latest_stream_url()
-    if not url:
-        return "No stream URL found in Firebase", 404
-
-    return Response(generate_stream(url),
+    """Streaming video asli langsung dari URL stream."""
+    return Response(generate_stream(FIXED_STREAM_URL),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
