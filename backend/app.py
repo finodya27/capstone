@@ -1,49 +1,129 @@
+# backend/app.py
 import os
+import atexit
+import time
 from flask import Flask, jsonify
 from flask_cors import CORS
+from flask_socketio import SocketIO
 from dotenv import load_dotenv
 
-
-# Impor inisialisasi Firebase
 from backend.database.db import initialize_firebase
-
-# Muat variabel lingkungan dari file .env
-load_dotenv()
-
-# Inisialisasi Firebase
-initialize_firebase()
-
-# Inisialisasi Flask
-app = Flask(__name__)
-
-# Aktifkan CORS untuk semua endpoint dengan prefix /api
-CORS(app, resources={r"/api/*": {"origins": "*"}})
-
-# Impor dan daftarkan blueprint API dari setiap modul
-from backend.api.telemetry import telemetry_blueprint
+from backend.api.telemetry import telemetry_blueprint, pixhawk
 from backend.api.reports import reports_blueprint
 from backend.api.auth import auth_blueprint
 from backend.api.video import video_blueprint
 from backend.api.servo import servo_api
 
+# =====================================================
+# Load Environment
+# =====================================================
+load_dotenv()
+
+# =====================================================
+# Initialize Firebase
+# =====================================================
+try:
+    initialize_firebase()
+    print("✅ Firebase berhasil diinisialisasi")
+except Exception as e:
+    print(f"❌ Gagal inisialisasi Firebase: {e}")
+
+# =====================================================
+# Flask & SocketIO (pakai threading agar stabil di Windows)
+# =====================================================
+app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+
+# =====================================================
+# Register API Blueprints
+# =====================================================
 app.register_blueprint(telemetry_blueprint, url_prefix="/api")
 app.register_blueprint(reports_blueprint, url_prefix="/api")
 app.register_blueprint(auth_blueprint, url_prefix="/api/auth")
 app.register_blueprint(video_blueprint, url_prefix="/api")
-app.register_blueprint(servo_api, url_prefix='/api')
+app.register_blueprint(servo_api, url_prefix="/api")
 
-
-# Route default untuk testing
+# =====================================================
+# Default Route
+# =====================================================
 @app.route("/")
 def home():
-    return jsonify({"message": "Server Fire Quad System berjalan!"})
+    return jsonify({"message": "🔥 Server Fire Quad System berjalan!"})
 
+# =====================================================
+# Socket.IO event handlers
+# =====================================================
+@socketio.on("disconnect")
+def handle_disconnect():
+    print("⚠️ Client terputus dari Socket.IO")
+
+# =====================================================
+# Telemetry Callback (attribute-based)
+# =====================================================
+def telemetry_callback(vehicle, attr_name, value):
+    try:
+        telemetry = pixhawk.get_telemetry()
+        if telemetry:
+            socketio.emit("telemetry", telemetry)
+    except Exception as e:
+        print(f"⚠️ Error callback [{attr_name}]: {e}")
+
+attributes_to_listen = [
+    "location", "attitude", "battery",
+    "airspeed", "groundspeed", "heading",
+    "gps_0", "rangefinder", "velocity"
+]
+
+if pixhawk and pixhawk.vehicle:
+    try:
+        for attr in attributes_to_listen:
+            pixhawk.vehicle.add_attribute_listener(attr, telemetry_callback)
+        print("✅ Pixhawk listeners aktif")
+    except Exception as e:
+        print(f"⚠️ Gagal pasang listener Pixhawk: {e}")
+else:
+    print("⚠️ Pixhawk belum terkoneksi")
+
+# =====================================================
+# Background Task → Telemetry Polling
+# =====================================================
+def telemetry_background_task():
+    while True:
+        try:
+            if pixhawk and pixhawk.vehicle:
+                telemetry = pixhawk.get_telemetry()
+                if telemetry:
+                    socketio.emit("telemetry", telemetry)
+            time.sleep(0.5)  # kirim data setiap 0.5 detik
+        except Exception as e:
+            print(f"⚠️ Error di background telemetry: {e}")
+            time.sleep(1)
+
+socketio.start_background_task(telemetry_background_task)
+
+# =====================================================
+# Cleanup saat server mati
+# =====================================================
+def cleanup():
+    if pixhawk and pixhawk.vehicle:
+        try:
+            for attr in attributes_to_listen:
+                pixhawk.vehicle.remove_attribute_listener(attr, telemetry_callback)
+            print("✅ Pixhawk listeners dicabut")
+        except Exception as e:
+            print(f"⚠️ Error saat unregister listener: {e}")
+
+atexit.register(cleanup)
+
+# =====================================================
+# Main Entry Point
+# =====================================================
 if __name__ == "__main__":
-    # Pastikan file kredensial ada sebelum menjalankan server
     firebase_cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
     if not firebase_cred_path or not os.path.exists(firebase_cred_path):
-        print("Error: File kredensial Firebase tidak ditemukan.")
+        print("❌ Error: File kredensial Firebase tidak ditemukan.")
         exit(1)
 
-    # Jalankan server
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    print("🚀 Server Fire Quad System berjalan di http://0.0.0.0:5000")
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False)

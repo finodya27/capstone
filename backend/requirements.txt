@@ -3,6 +3,12 @@ Flask==2.3.3
 FastAPI==0.103.1
 uvicorn==0.23.2
 flask-cors==6.0.1
+Flask-SocketIO==5.3.6
+
+# Async workers (opsional, salah satu saja)
+eventlet==0.33.3
+gevent==23.9.1
+gevent-websocket==0.10.1
 
 # Drone communication
 pymavlink==2.4.49

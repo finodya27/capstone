@@ -1,6 +1,8 @@
-import React from "react";
+import useTelemetry from "../hooks/useTelemetry";
 
-const TelemetryPanel = ({ telemetryData }) => {
+const TelemetryPanel = () => {
+  const telemetryData = useTelemetry();
+
   if (!telemetryData) {
     return (
       <div className="p-6 text-center">
@@ -30,7 +32,6 @@ const TelemetryPanel = ({ telemetryData }) => {
       ? (rad * 180 / Math.PI).toFixed(2)
       : "N/A";
 
-  // Fungsi untuk mendapatkan warna battery
   const getBatteryColor = (level) => {
     if (level === "N/A") return "text-gray-500";
     if (level > 60) return "text-green-500";
@@ -38,7 +39,6 @@ const TelemetryPanel = ({ telemetryData }) => {
     return "text-red-500";
   };
 
-  // Fungsi untuk mendapatkan status GPS
   const getGpsStatus = (fixType, satellites) => {
     if (fixType === "N/A" || !satellites) return { status: "No Fix", color: "text-red-500" };
     if (fixType >= 3 && satellites >= 4) return { status: "Good Fix", color: "text-green-500" };
@@ -127,7 +127,7 @@ const TelemetryPanel = ({ telemetryData }) => {
           </div>
         </div>
 
-        {/* Speed Section */}
+        {/* Speed */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
             <div className="flex items-center space-x-2 mb-1">

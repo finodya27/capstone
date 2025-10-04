@@ -1,0 +1,4 @@
+set moddebug 2
+module unload wx
+module unload wxconsole
+module unload map
