@@ -67,62 +67,64 @@ function VideoStream({ type }) {
       }`}
     >
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-800 to-gray-700 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className={`p-2 rounded-full ${
-            type === "detection" ? "bg-red-500/20" : "bg-blue-500/20"
-          }`}>
-            <span className="text-xl">{icon}</span>
+      {!isFullscreen && (
+        <div className="bg-gradient-to-r from-gray-800 to-gray-700 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className={`p-2 rounded-full ${
+              type === "detection" ? "bg-red-500/20" : "bg-blue-500/20"
+            }`}>
+              <span className="text-xl">{icon}</span>
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">{title}</h3>
+              <p className="text-gray-300 text-sm">
+                {isError ? "Connection Error" : isLoading ? "Connecting..." : "Live Stream"}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-white font-semibold">{title}</h3>
-            <p className="text-gray-300 text-sm">
-              {isError ? "Connection Error" : isLoading ? "Connecting..." : "Live Stream"}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center space-x-2">
-          {/* Status indicator */}
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${
-              isError ? "bg-red-500" : isLoading ? "bg-yellow-500 animate-pulse" : "bg-green-500 animate-pulse"
-            }`}></div>
-            <span className="text-gray-300 text-xs">
-              {isError ? "Offline" : isLoading ? "Loading" : "Live"}
-            </span>
-          </div>
+            {/* Status indicator */}
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${
+                isError ? "bg-red-500" : isLoading ? "bg-yellow-500 animate-pulse" : "bg-green-500 animate-pulse"
+              }`}></div>
+              <span className="text-gray-300 text-xs">
+                {isError ? "Offline" : isLoading ? "Loading" : "Live"}
+              </span>
+            </div>
 
-          {/* Controls */}
-          <div className="flex space-x-1">
-            {isError && (
+            {/* Controls */}
+            <div className="flex space-x-1">
+              {isError && (
+                <button
+                  onClick={handleRetry}
+                  className="p-1 bg-blue-500 hover:bg-blue-600 rounded transition-colors"
+                  title="Retry Connection"
+                >
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              )}
+              
               <button
-                onClick={handleRetry}
-                className="p-1 bg-blue-500 hover:bg-blue-600 rounded transition-colors"
-                title="Retry Connection"
+                onClick={toggleFullscreen}
+                className="p-1 bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+                title="Toggle Fullscreen"
               >
                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  {isFullscreen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  )}
                 </svg>
               </button>
-            )}
-            
-            <button
-              onClick={toggleFullscreen}
-              className="p-1 bg-gray-600 hover:bg-gray-500 rounded transition-colors"
-              title="Toggle Fullscreen"
-            >
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {isFullscreen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                )}
-              </svg>
-            </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Video Content */}
       <div className={`relative bg-black ${isFullscreen ? 'h-full' : 'aspect-video'} flex items-center justify-center`}>
@@ -207,21 +209,23 @@ function VideoStream({ type }) {
       </div>
 
       {/* Footer info */}
-      <div className="bg-gray-800 px-4 py-2 flex items-center justify-between text-xs text-gray-400">
-        <div className="flex items-center space-x-2">
-          <span>Resolution: Auto</span>
-          <span>•</span>
-          <span>FPS: 30</span>
-          <span>•</span>
-          <span>Quality: {isError ? "Offline" : "HD"}</span>
+      {!isFullscreen && (
+        <div className="bg-gray-800 px-4 py-2 flex items-center justify-between text-xs text-gray-400">
+          <div className="flex items-center space-x-2">
+            <span>Resolution: Auto</span>
+            <span>•</span>
+            <span>FPS: 30</span>
+            <span>•</span>
+            <span>Quality: {isError ? "Offline" : "HD"}</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>Low Latency Stream</span>
+          </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          <span>Low Latency Stream</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
