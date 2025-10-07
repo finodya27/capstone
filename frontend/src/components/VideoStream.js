@@ -12,7 +12,7 @@ function VideoStream({ type }) {
       ? "http://127.0.0.1:5000/api/video/detection"
       : "https://infomatchacii.web.id/stream.mjpg";
 
-  const title = type === "detection" ? "Fire Detection Feed" : "Raw Camera Feed";
+  const title = type === "detection" ? "" : " ";
   const icon = type === "detection" ? "🔥" : "📹";
 
   // Handle image load

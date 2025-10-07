@@ -1,33 +1,44 @@
+// frontend/src/utils/api.js
 import axios from "axios";
 
-// Base URL backend Flask
-const API_URL = "http://127.0.0.1:5000/api";
-
-// Buat instance axios
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: "http://127.0.0.1:5000/api",
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// Interceptor: Tambahkan token ke setiap request jika ada
+// ✅ Interceptor untuk menambahkan token ke setiap request
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
     if (token) {
-      config.headers["Authorization"] = `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-// Interceptor: Tangani error (misal token invalid)
+// ✅ Interceptor untuk handle response error
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error) => {
-    if (error.response && error.response.status === 401) {
-      console.error("Unauthorized! Silakan login ulang.");
+    // Jika token expired atau invalid
+    if (error.response?.status === 401) {
+      console.warn("Token expired atau invalid. Redirecting to login...");
       localStorage.removeItem("token");
-      window.location.href = "/login"; // redirect ke login
+      localStorage.removeItem("userName");
+      localStorage.removeItem("userRole");
+      
+      // Redirect ke login jika tidak sedang di halaman login
+      if (window.location.pathname !== "/" && window.location.pathname !== "/register") {
+        window.location.href = "/";
+      }
     }
     return Promise.reject(error);
   }
