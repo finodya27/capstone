@@ -3,23 +3,22 @@ from firebase_admin import db
 from backend.utils.pixhawk_helper import PixhawkHelper
 from backend.database.models import DroneData
 from datetime import datetime
+import time
 
 telemetry_blueprint = Blueprint("telemetry", __name__)
 
-# Gunakan koneksi UDP dari MAVProxy, bukan langsung COM3
-# MAVProxy command: mavproxy.py --master=COM3 --baudrate 57600 --out=udp:127.0.0.1:14550 --out=udp:127.0.0.1:14551
+# Gunakan koneksi UDP dari MAVProxy
+# MAVProxy command:
+# mavproxy.py --master=COM3 --baudrate 57600 --out=udp:127.0.0.1:14550 --out=udp:127.0.0.1:14551
 pixhawk = PixhawkHelper(device="udp:127.0.0.1:14551", baud=57600)
 
 
-# Fungsi untuk mengambil data ketinggian dari sonar (sonarrange)
 def get_sonar_range(telemetry):
     if "sonarrange" in telemetry:
         return telemetry["sonarrange"]
-    else:
-        return telemetry.get("altitude", None)  # fallback ke GPS altitude jika sonar tidak ada
+    return telemetry.get("altitude", None)
 
 
-# Fungsi util: Membuat objek DroneData dari hasil Pixhawk dan sonar
 def create_drone_data_from_pixhawk(telemetry):
     sonar_altitude = get_sonar_range(telemetry)
 
@@ -41,6 +40,7 @@ def create_drone_data_from_pixhawk(telemetry):
             "fix_type": telemetry["gps"].get("fix_type"),
             "satellites_visible": telemetry["gps"].get("satellites_visible"),
         } if "gps" in telemetry else {},
+        qos=telemetry.get("qos", None),  # ✅ QoS ikut disimpan
         fire_detected=False,
         temperature=None,
         wind_direction=None,
@@ -53,6 +53,19 @@ def post_telemetry_data():
     try:
         telemetry = pixhawk.get_telemetry()
         if telemetry:
+
+            # ✅ QoS Tambahan
+            try:
+                stats = pixhawk.vehicle._master.stats
+                telemetry["qos"] = {
+                    "packet_loss": stats.packet_loss(),
+                    "rx_rate": stats.rx_rate(),
+                    "tx_rate": stats.tx_rate(),
+                    "heartbeat_delay": round(time.time() - pixhawk.vehicle.last_heartbeat, 3)
+                }
+            except Exception as qos_err:
+                print(f"⚠️ QoS error: {qos_err}")
+
             drone_data = create_drone_data_from_pixhawk(telemetry)
 
             ref = db.reference("/drone_data")
@@ -79,6 +92,7 @@ def post_telemetry_data():
                 "message": "⚠️ Pixhawk offline. Menampilkan data terakhir dari Firebase.",
                 "data": telemetry
             }), 200
+
         except Exception as db_err:
             return jsonify({"error": f"Gagal mengambil dari Firebase: {db_err}"}), 500
 
@@ -88,6 +102,19 @@ def get_latest_telemetry():
     try:
         telemetry = pixhawk.get_telemetry()
         if telemetry:
+
+            # ✅ QoS Tambahan
+            try:
+                stats = pixhawk.vehicle._master.stats
+                telemetry["qos"] = {
+                    "packet_loss": stats.packet_loss(),
+                    "rx_rate": stats.rx_rate(),
+                    "tx_rate": stats.tx_rate(),
+                    "heartbeat_delay": round(time.time() - pixhawk.vehicle.last_heartbeat, 3)
+                }
+            except Exception as qos_err:
+                print(f"⚠️ QoS error: {qos_err}")
+
             drone_data = create_drone_data_from_pixhawk(telemetry)
             return jsonify({
                 "message": "✅ Data terbaru dari Pixhawk.",
@@ -95,6 +122,7 @@ def get_latest_telemetry():
             }), 200
 
         raise Exception("Pixhawk tidak merespons.")
+
     except Exception as e:
         print("⚠️ Gagal ambil data Pixhawk:", e)
         try:
@@ -109,5 +137,6 @@ def get_latest_telemetry():
                 "message": "⚠️ Pixhawk offline. Menampilkan data terakhir dari Firebase.",
                 "data": telemetry
             }), 200
+
         except Exception as db_err:
             return jsonify({"error": f"Gagal mengambil dari Firebase: {db_err}"}), 500
