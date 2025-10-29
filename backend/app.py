@@ -7,13 +7,16 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from dotenv import load_dotenv
 
+# Import yang diperlukan
 from backend.database.db import initialize_firebase
-from backend.api.telemetry import telemetry_blueprint, pixhawk
+from backend.api.telemetry import telemetry_blueprint, pixhawk, create_drone_data_from_pixhawk # Tambah create_drone_data_from_pixhawk
 from backend.api.reports import reports_blueprint
 from backend.api.auth import auth_blueprint
 from backend.api.user import user_blueprint
 from backend.api.video import video_blueprint
 from backend.api.servo import servo_api
+from firebase_admin import db # Import database untuk auto-save
+from datetime import datetime # Import datetime untuk timestamp auto-save
 
 # =====================================================
 # Load Environment
@@ -66,19 +69,13 @@ def health():
     return jsonify({"status": "ok", "message": "Server is running"}), 200
 
 # =====================================================
-# Socket.IO event handlers
-# =====================================================
-@socketio.on("disconnect")
-def handle_disconnect():
-    print("⚠️ Client terputus dari Socket.IO")
-
-# =====================================================
-# Telemetry Callback (attribute-based)
+# Telemetry Callback (attribute-based) - HANYA untuk Socket.IO
 # =====================================================
 def telemetry_callback(vehicle, attr_name, value):
     try:
+        # Gunakan get_telemetry() untuk mendapatkan data lengkap (termasuk QoS)
         telemetry = pixhawk.get_telemetry()
-        if telemetry:
+        if telemetry and telemetry.get("source") == "pixhawk":
             socketio.emit("telemetry", telemetry)
     except Exception as e:
         print(f"⚠️ Error callback [{attr_name}]: {e}")
@@ -100,21 +97,65 @@ else:
     print("⚠️ Pixhawk belum terkoneksi")
 
 # =====================================================
-# Background Task → Telemetry Polling
+# Background Task 1 → Telemetry Polling (JAGA KONEKSI & SOCKET.IO)
 # =====================================================
 def telemetry_background_task():
+    """Mengambil data Pixhawk setiap 0.5s dan mengirimkannya via Socket.IO."""
     while True:
         try:
             if pixhawk and pixhawk.vehicle:
-                telemetry = pixhawk.get_telemetry()
-                if telemetry:
+                # get_telemetry() akan melakukan polling, menghitung QoS, dan menjaga koneksi
+                telemetry = pixhawk.get_telemetry() 
+                if telemetry and telemetry.get("source") == "pixhawk":
                     socketio.emit("telemetry", telemetry)
             time.sleep(0.5)
         except Exception as e:
-            print(f"⚠️ Error di background telemetry: {e}")
+            # Print error hanya jika severity tinggi
+            # print(f"⚠️ Error di background telemetry: {e}") 
             time.sleep(1)
 
 socketio.start_background_task(telemetry_background_task)
+
+
+# =====================================================
+# Background Task 2 → Telemetry Auto-Save to Firebase (Setiap 1 Menit)
+# =====================================================
+FIREBASE_SAVE_INTERVAL = 60 # Simpan setiap 60 detik (1 menit)
+
+def firebase_autosave_task():
+    """
+    Background task untuk mengambil data dari Pixhawk (jika terhubung) 
+    dan menyimpannya ke Firebase setiap 60 detik.
+    """
+    while True:
+        try:
+            # Tidur selama interval sebelum mencoba save lagi
+            time.sleep(FIREBASE_SAVE_INTERVAL) 
+            
+            if pixhawk and pixhawk.vehicle:
+                # Dapatkan data terbaru dari Pixhawk (diprioritaskan)
+                telemetry = pixhawk.get_telemetry()
+                
+                # Hanya simpan jika data Pixhawk berhasil diambil
+                if telemetry and telemetry.get("source") == "pixhawk": 
+                    
+                    # Konversi ke model data (menambahkan timestamp saat ini)
+                    drone_data = create_drone_data_from_pixhawk(telemetry) 
+                    
+                    # Simpan ke Firebase Realtime Database
+                    ref = db.reference("/drone_data")
+                    ref.push().set(drone_data.to_dict())
+                    
+                    print(f"✅ Auto-save data Pixhawk ke Firebase: {datetime.now().isoformat()}")
+                else:
+                    print("ⓘ Pixhawk tidak terhubung/tidak ada data, auto-save dilewati.")
+                
+        except Exception as e:
+            print(f"⚠️ Error di background auto-save Firebase: {e}")
+
+# Aktifkan background task auto-save
+socketio.start_background_task(firebase_autosave_task)
+
 
 # =====================================================
 # Cleanup saat server mati
