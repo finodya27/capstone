@@ -1,6 +1,6 @@
 // frontend/src/pages/Analytics.js
 import React, { useState, useEffect } from "react";
-import Sidebar from "../components/Sidebar";
+import Layout from "../components/Layout";
 import {
   LineChart,
   Line,
@@ -12,7 +12,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import api from "../utils/api"; // ✅ axios instance global
+import api from "../utils/api";
 
 // 🧩 Data Dummy sementara
 const sampleLogs = [
@@ -68,12 +68,10 @@ const sampleLogs = [
 ];
 
 const Analytics = () => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [flightLogs, setFlightLogs] = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
-  const USE_DUMMY_DATA = true; // ✅ ubah ke false untuk pakai API backend
+  const USE_DUMMY_DATA = true;
 
-  // Statistik ringkas
   const stats = {
     firesDetected: 132,
     avgResponse: "3m 12s",
@@ -81,7 +79,6 @@ const Analytics = () => {
     totalFlightTime: "42 jam 15m",
   };
 
-  // 🔥 Grafik tren kebakaran per bulan
   const fireTrendData = [
     { month: "Jan", fires: 8 },
     { month: "Feb", fires: 12 },
@@ -97,7 +94,6 @@ const Analytics = () => {
     { month: "Des", fires: 23 },
   ];
 
-  // 📍 Distribusi area kebakaran
   const areaDistribution = [
     { area: "Tembalang", fires: 45 },
     { area: "Banyumanik", fires: 37 },
@@ -106,15 +102,12 @@ const Analytics = () => {
     { area: "Candisari", fires: 13 },
   ];
 
-  // 🧠 Ambil data log (hybrid mode)
   useEffect(() => {
     const fetchLogs = async () => {
       try {
         if (USE_DUMMY_DATA) {
-          console.log("🧩 Mode: Dummy Data");
           setFlightLogs(sampleLogs);
         } else {
-          console.log("🌐 Mode: Real API Data");
           const res = await api.get("/flight-logs");
           setFlightLogs(res.data.logs);
         }
@@ -124,204 +117,163 @@ const Analytics = () => {
       }
     };
     fetchLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Logout
   const handleLogout = () => {
     localStorage.removeItem("token");
     window.location.href = "/";
   };
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <Sidebar
-        onLogout={handleLogout}
-        isCollapsed={isCollapsed}
-        setIsCollapsed={setIsCollapsed}
-      />
-
-      <main
-        className={`flex-1 transition-all duration-300 ${
-          isCollapsed ? "ml-20" : "ml-64"
-        } p-6 overflow-y-auto`}
-      >
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">
-            Analytics Dashboard
-          </h1>
-          <p className="text-gray-600 mt-2">
-            Analisis performa drone, tren kebakaran bulanan, dan log penerbangan
-          </p>
-        </div>
-
-        {/* [A] Statistik Utama */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-          {[
-            {
-              label: "🔥 Kebakaran Terdeteksi",
-              value: stats.firesDetected,
-              color: "text-red-500",
-            },
-            {
-              label: "🕒 Waktu Respons Rata-rata",
-              value: stats.avgResponse,
-              color: "text-yellow-500",
-            },
-            {
-              label: "📍 Area Terbanyak",
-              value: stats.topArea,
-              color: "text-green-600",
-            },
-            {
-              label: "🚁 Durasi Penerbangan",
-              value: stats.totalFlightTime,
-              color: "text-blue-500",
-            },
-          ].map((item, i) => (
-            <div key={i} className="bg-white rounded-2xl shadow-md p-5">
-              <p className="text-gray-500 text-sm">{item.label}</p>
-              <h2
-                className={`text-2xl font-semibold mt-2 ${item.color}`}
-              >
-                {item.value}
-              </h2>
-            </div>
-          ))}
-        </div>
-
-        {/* [B] Grafik Tren & Distribusi */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* 🔥 Grafik Tren */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              🔥 Tren Kebakaran per Bulan (2025)
+    <Layout
+      pageTitle="Analytics"
+      subtitle="Analisis Performa & Data Kebakaran "
+      connectionStatus="firebase"
+      onLogout={handleLogout}
+    >
+      {/* Statistik Utama */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+        {[
+          {
+            label: "🔥 Kebakaran Terdeteksi",
+            value: stats.firesDetected,
+            color: "text-red-500",
+          },
+          {
+            label: "🕒 Waktu Respons Rata-rata",
+            value: stats.avgResponse,
+            color: "text-yellow-500",
+          },
+          {
+            label: "📍 Area Terbanyak",
+            value: stats.topArea,
+            color: "text-green-600",
+          },
+          {
+            label: "🚁 Durasi Penerbangan",
+            value: stats.totalFlightTime,
+            color: "text-blue-500",
+          },
+        ].map((item, i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-md p-5 border border-gray-200">
+            <p className="text-gray-500 text-sm">{item.label}</p>
+            <h2 className={`text-2xl font-semibold mt-2 ${item.color}`}>
+              {item.value}
             </h2>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={fireTrendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="fires"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
           </div>
+        ))}
+      </div>
 
-          {/* 📍 Distribusi Lokasi */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              📍 Distribusi Lokasi Kebakaran
-            </h2>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={areaDistribution}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="area" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="fires" fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* [C] Log Penerbangan */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+      {/* Grafik */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            📜 Log Penerbangan Drone
+            🔥 Tren Kebakaran per Bulan (2025)
           </h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-gray-50 rounded-xl overflow-hidden text-gray-800">
-              <thead className="bg-gray-200">
-                <tr>
-                  <th className="px-4 py-2 text-left text-sm font-semibold">
-                    Waktu Mulai
-                  </th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold">
-                    Durasi
-                  </th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold">
-                    Lokasi
-                  </th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold">
-                    Battery
-                  </th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold">
-                    Deteksi Api
-                  </th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold">
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {flightLogs.map((log) => (
-                  <tr
-                    key={log.id}
-                    className="border-t border-gray-200 hover:bg-gray-100 transition-colors"
-                  >
-                    <td className="px-4 py-2">{log.start_time}</td>
-                    <td className="px-4 py-2">{log.duration}</td>
-                    <td className="px-4 py-2">{log.location}</td>
-                    <td className="px-4 py-2 text-blue-600">{log.battery}%</td>
-                    <td className="px-4 py-2">
-                      {log.fire_detected ? (
-                        <span className="text-red-500 font-semibold">🔥 Ya</span>
-                      ) : (
-                        <span className="text-gray-500">Tidak</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <button
-                        onClick={() => setSelectedLog(log)}
-                        className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700"
-                      >
-                        Lihat Detail
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={fireTrendData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="fires" stroke="#ef4444" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* [Modal Detail Log] */}
-        {selectedLog && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-xl shadow-xl p-6 w-[90%] max-w-lg">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                Detail Penerbangan #{selectedLog.id}
-              </h2>
-              <p className="text-gray-500 mb-4">
-                Waktu Mulai: {selectedLog.start_time} <br />
-                Durasi: {selectedLog.duration} <br />
-                Lokasi: {selectedLog.location}
-              </p>
-              <ul className="list-disc ml-5 text-gray-700 space-y-1 mb-4">
-                {selectedLog.summary.map((item, idx) => (
-                  <li key={idx}>{item}</li>
+        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">
+            📍 Distribusi Lokasi Kebakaran
+          </h2>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={areaDistribution}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="area" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="fires" fill="#3b82f6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Log Penerbangan */}
+      <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-200">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+          📜 Log Penerbangan Drone
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-gray-50 rounded-xl overflow-hidden text-gray-800">
+            <thead className="bg-gray-200">
+              <tr>
+                {["Waktu Mulai", "Durasi", "Lokasi", "Battery", "Deteksi Api", "Aksi"].map((header, i) => (
+                  <th key={i} className="px-4 py-2 text-left text-sm font-semibold">
+                    {header}
+                  </th>
                 ))}
-              </ul>
-              <div className="text-right">
-                <button
-                  onClick={() => setSelectedLog(null)}
-                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+              </tr>
+            </thead>
+            <tbody>
+              {flightLogs.map((log) => (
+                <tr
+                  key={log.id}
+                  className="border-t border-gray-200 hover:bg-gray-100 transition-colors"
                 >
-                  Tutup
-                </button>
-              </div>
+                  <td className="px-4 py-2">{log.start_time}</td>
+                  <td className="px-4 py-2">{log.duration}</td>
+                  <td className="px-4 py-2">{log.location}</td>
+                  <td className="px-4 py-2 text-blue-600">{log.battery}%</td>
+                  <td className="px-4 py-2">
+                    {log.fire_detected ? (
+                      <span className="text-red-500 font-semibold">🔥 Ya</span>
+                    ) : (
+                      <span className="text-gray-500">Tidak</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <button
+                      onClick={() => setSelectedLog(log)}
+                      className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700"
+                    >
+                      Lihat Detail
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal */}
+      {selectedLog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[90%] max-w-lg">
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">
+              Detail Penerbangan #{selectedLog.id}
+            </h2>
+            <p className="text-gray-500 mb-4">
+              Waktu Mulai: {selectedLog.start_time} <br />
+              Durasi: {selectedLog.duration} <br />
+              Lokasi: {selectedLog.location}
+            </p>
+            <ul className="list-disc ml-5 text-gray-700 space-y-1 mb-4">
+              {selectedLog.summary.map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
+            </ul>
+            <div className="text-right">
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+              >
+                Tutup
+              </button>
             </div>
           </div>
-        )}
-      </main>
-    </div>
+        </div>
+      )}
+    </Layout>
   );
 };
 
