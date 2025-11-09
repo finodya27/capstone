@@ -1,150 +1,120 @@
-// frontend/src/pages/Settings.js
+"use client";
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import api from "../utils/api";
 
 const Settings = () => {
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [profileImage, setProfileImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const navigate = useNavigate();
-  
+
+  // User Data
   const [userData, setUserData] = useState({
-    name: "",
+    username: "",
     email: "",
     phone: "",
     role: "",
     department: "",
+    profileImage: "",
   });
 
+  // System Preferences
+  const [preferences, setPreferences] = useState({
+    theme: "light",
+    emailNotifications: true,
+    defaultDroneMode: "manual",
+  });
+
+  const [profileImage, setProfileImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    localStorage.clear();
     navigate("/");
   };
 
-  // Fetch user data dari API
+  // 🧭 Fetch data
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchData = async () => {
       setIsLoading(true);
-      setError(null);
-      
       try {
-        const res = await api.get("/user/profile");
-        const data = res.data.data || res.data;
-        
-        setUserData({
-          name: data.name || "",
-          email: data.email || "",
-          phone: data.phone || "",
-          role: data.role || "",
-          department: data.department || "",
-        });
-        
-        if (data.profileImage) {
-          setImagePreview(data.profileImage);
-        }
+        const [userRes, prefRes] = await Promise.all([
+          api.get("/user/profile"),
+          api.get("/user/preferences"),
+        ]);
+
+        const user = userRes.data.data;
+        const pref = prefRes.data.data;
+
+        setUserData(user);
+        setPreferences(pref || preferences);
+
+        if (user.profileImage) setImagePreview(user.profileImage);
       } catch (err) {
-        console.error("Gagal mengambil data user:", err);
-        
-        // Cek jika token invalid atau expired
+        console.error("Gagal memuat data:", err);
         if (err.response?.status === 401) {
-          alert("Session expired. Please login again.");
-          localStorage.removeItem("token");
+          alert("Sesi login berakhir. Silakan login ulang.");
+          localStorage.clear();
           navigate("/");
         } else {
-          setError(err.response?.data?.error || "Gagal memuat data profil. Silakan refresh halaman.");
+          setError("Gagal memuat data profil.");
         }
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchUserData();
-  }, [navigate]);
+    fetchData();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setUserData((prev) => ({
+    setUserData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handlePrefChange = (e) => {
+    const { name, type, checked, value } = e.target;
+    setPreferences((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value,
     }));
   };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      // Validasi ukuran file (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert("Ukuran file terlalu besar! Maksimal 5MB.");
-        return;
-      }
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return alert("Ukuran maksimal 5MB!");
+    if (!file.type.startsWith("image/")) return alert("File harus gambar!");
 
-      // Validasi tipe file
-      if (!file.type.startsWith('image/')) {
-        alert("File harus berupa gambar!");
-        return;
-      }
-
-      setProfileImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
+    setProfileImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result);
+    reader.readAsDataURL(file);
   };
 
+  // 💾 Simpan profil
   const handleSave = async () => {
     setIsSaving(true);
-    setError(null);
-    
     try {
       const formData = new FormData();
-      formData.append("name", userData.name);
-      formData.append("email", userData.email);
-      formData.append("phone", userData.phone);
-      formData.append("role", userData.role);
-      formData.append("department", userData.department);
-      
-      if (profileImage) {
-        formData.append("profileImage", profileImage);
-      }
+      Object.entries(userData).forEach(([key, val]) => formData.append(key, val));
+      if (profileImage) formData.append("profileImage", profileImage);
 
-      const res = await api.put("/user/profile", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      await api.put("/user/profile", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
-      // Update state dengan data terbaru dari server
-      const updatedData = res.data.data;
-      if (updatedData) {
-        setUserData({
-          name: updatedData.name || userData.name,
-          email: updatedData.email || userData.email,
-          phone: updatedData.phone || userData.phone,
-          role: updatedData.role || userData.role,
-          department: updatedData.department || userData.department,
-        });
-        
-        if (updatedData.profileImage) {
-          setImagePreview(updatedData.profileImage);
-        }
-      }
+      await api.put("/user/preferences", preferences);
 
-      alert("✅ Profile berhasil diupdate!");
+      alert("✅ Profil dan pengaturan berhasil disimpan!");
       setIsEditing(false);
       setProfileImage(null);
     } catch (err) {
-      console.error("Gagal update profile:", err);
-      const errorMsg = err.response?.data?.error || "Gagal update profile. Silakan coba lagi.";
-      setError(errorMsg);
-      alert("❌ " + errorMsg);
+      console.error("❌ Gagal menyimpan:", err);
+      alert("Gagal menyimpan perubahan.");
     } finally {
       setIsSaving(false);
     }
@@ -153,253 +123,158 @@ const Settings = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setProfileImage(null);
-    setError(null);
-    
-    // Reset ke data original (re-fetch)
     window.location.reload();
   };
 
-  // Loading state
-  if (isLoading) {
+  // Loading screen
+  if (isLoading)
     return (
-      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <Sidebar 
-          onLogout={handleLogout} 
-          isCollapsed={isCollapsed} 
-          setIsCollapsed={setIsCollapsed} 
-        />
-        
-        <main 
-          className={`flex-1 transition-all duration-300 ${
-            isCollapsed ? "ml-20" : "ml-64"
-          } flex items-center justify-center`}
-        >
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mb-4 mx-auto"></div>
-            <p className="text-gray-600 text-lg">Loading profile...</p>
-          </div>
-        </main>
+      <div className="flex min-h-screen bg-gray-50 items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-10 w-10 border-2 border-blue-600 rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600">Memuat data pengguna...</p>
+        </div>
       </div>
     );
-  }
-
-  // Error state
-  if (error && !userData.email) {
-    return (
-      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <Sidebar 
-          onLogout={handleLogout} 
-          isCollapsed={isCollapsed} 
-          setIsCollapsed={setIsCollapsed} 
-        />
-        
-        <main 
-          className={`flex-1 transition-all duration-300 ${
-            isCollapsed ? "ml-20" : "ml-64"
-          } flex items-center justify-center p-6`}
-        >
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
-            <div className="text-6xl mb-4">⚠️</div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Failed to Load Profile</h2>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition shadow-md"
-            >
-              🔄 Retry
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <Sidebar 
-        onLogout={handleLogout} 
-        isCollapsed={isCollapsed} 
-        setIsCollapsed={setIsCollapsed} 
+      <Sidebar
+        isCollapsed={isCollapsed}
+        setIsCollapsed={setIsCollapsed}
+        onLogout={handleLogout}
       />
-      
-      <main 
-        className={`flex-1 transition-all duration-300 ${
-          isCollapsed ? "ml-20" : "ml-64"
-        } p-6`}
-      >
+      <main className={`flex-1 p-6 transition-all ${isCollapsed ? "ml-20" : "ml-64"}`}>
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-800">Settings</h1>
-            <p className="text-gray-600 mt-2">Manage your profile and preferences</p>
-          </div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-4">Settings</h1>
+          <p className="text-gray-600 mb-8">
+            Kelola akun dan preferensi sistem Fire Quad System.
+          </p>
 
-          {/* Error Alert */}
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center text-red-700">
-              <span className="mr-2">⚠️</span>
-              <span className="text-sm">{error}</span>
-            </div>
-          )}
-
-          {/* Profile Card */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            {/* Banner */}
-            <div className="h-32 bg-gradient-to-r from-blue-600 to-blue-800"></div>
-            
-            {/* Profile Content */}
-            <div className="px-8 pb-8">
-              {/* Profile Image */}
-              <div className="flex justify-between items-start -mt-16 mb-6">
+          {/* Profile Section */}
+          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <div className="flex justify-between items-start">
+              <div className="flex gap-6 items-center">
                 <div className="relative">
-                  <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
+                  <div className="w-32 h-32 rounded-full border-4 border-blue-600 overflow-hidden bg-gray-100">
                     {imagePreview ? (
-                      <img 
-                        src={imagePreview} 
-                        alt="Profile" 
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={imagePreview} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-4xl text-gray-400">
+                      <div className="flex items-center justify-center w-full h-full text-4xl text-gray-400">
                         👤
                       </div>
                     )}
                   </div>
-                  
                   {isEditing && (
-                    <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full cursor-pointer shadow-lg transition">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
-                      <span className="text-lg">📷</span>
+                    <label className="absolute bottom-0 right-0 bg-blue-600 p-2 rounded-full text-white cursor-pointer shadow-md">
+                      <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                      📷
                     </label>
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="mt-16">
-                  {!isEditing ? (
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition shadow-md"
-                    >
-                      ✏️ Edit Profile
-                    </button>
-                  ) : (
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isSaving ? (
-                          <span className="flex items-center">
-                            <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Saving...
-                          </span>
-                        ) : (
-                          "💾 Save"
-                        )}
-                      </button>
-                      <button
-                        onClick={handleCancel}
-                        disabled={isSaving}
-                        className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition shadow-md disabled:opacity-50"
-                      >
-                        ❌ Cancel
-                      </button>
-                    </div>
-                  )}
+                <div>
+                  <h2 className="text-2xl font-bold">{userData.username}</h2>
+                  <p className="text-gray-500">{userData.email}</p>
+                  <p className="text-gray-400 text-sm">{userData.department || "No department"}</p>
                 </div>
               </div>
 
-              {/* Profile Form */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Name
+              {!isEditing ? (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-lg shadow hover:bg-blue-700"
+                >
+                  ✏️ Edit
+                </button>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {isSaving ? "💾 Menyimpan..." : "💾 Simpan"}
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600"
+                  >
+                    ❌ Batal
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Form */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+              {["username", "email", "phone", "role", "department"].map((field) => (
+                <div key={field}>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 capitalize">
+                    {field.replace("_", " ")}
                   </label>
                   <input
                     type="text"
-                    name="name"
-                    value={userData.name}
-                    onChange={handleInputChange}
+                    name={field}
+                    value={userData[field]}
                     disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={userData.email}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={userData.phone}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Role
-                  </label>
-                  <input
-                    type="text"
-                    name="role"
-                    value={userData.role}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Department
-                  </label>
-                  <input
-                    type="text"
-                    name="department"
-                    value={userData.department}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
-                  />
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Additional Settings */}
-          <div className="mt-8 bg-white rounded-xl shadow-lg p-8">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">System Preferences</h2>
-            <p className="text-gray-600">
-              Additional system settings and configurations will be available here.
-            </p>
+          {/* System Preferences */}
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            <h2 className="text-xl font-bold mb-4 text-gray-800">System Preferences</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Tema */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Theme Mode</label>
+                <select
+                  name="theme"
+                  value={preferences.theme}
+                  onChange={handlePrefChange}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  disabled={!isEditing}
+                >
+                  <option value="light">🌤️ Light Mode</option>
+                  <option value="dark">🌙 Dark Mode</option>
+                  <option value="auto">⚙️ System Default</option>
+                </select>
+              </div>
+
+              {/* Email Notification */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="emailNotifications"
+                  checked={preferences.emailNotifications}
+                  onChange={handlePrefChange}
+                  disabled={!isEditing}
+                  className="mr-3 h-5 w-5 text-blue-600 focus:ring-2"
+                />
+                <span className="text-gray-700">Enable Email Notifications</span>
+              </div>
+
+              {/* Drone Mode */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Default Drone Mode</label>
+                <select
+                  name="defaultDroneMode"
+                  value={preferences.defaultDroneMode}
+                  onChange={handlePrefChange}
+                  disabled={!isEditing}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="manual">🕹️ Manual Mode</option>
+                  <option value="autonomous">🤖 Autonomous Mode</option>
+                  <option value="survey">🛰️ Survey Mode</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
       </main>

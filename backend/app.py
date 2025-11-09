@@ -22,6 +22,8 @@ from datetime import datetime # Import datetime untuk timestamp auto-save
 # Load Environment
 # =====================================================
 load_dotenv()
+import os
+print("JWT_SECRET_KEY:", os.getenv("JWT_SECRET_KEY"))
 
 # =====================================================
 # Initialize Firebase
