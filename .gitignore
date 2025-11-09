@@ -1,23 +1,83 @@
-# Virtual Environment
-venv/
+"" 
+# ========================================
+# 🔒 SENSITIVE FILES & KEYS
+# ========================================
+# Jangan commit file kredensial apa pun
+backend/firebase_key.json
+backend/**/firebase_key.json
+*.pem
+*.key
+*.crt
+*.p12
+*.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
 
-# File Konfigurasi Sensitif
-backend/.env
-
-# Kredensial Firebase (sangat penting!)
-backend/firequadsystem-firebase-adminsdk-xxxxx-xxxx.json
-
-# Log atau File Kompilasi
-*.log
+# ========================================
+# 🧠 PYTHON BACKEND (Flask / FastAPI)
+# ========================================
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+instance/
+.env
+venv/
+env/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Folder dependensi Node.js
-frontend/node_modules/
+# ========================================
+# ⚙️ NODE.JS / FRONTEND (React / Next.js)
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.next/
+out/
+.cache/
+*.log
 
-# Build atau distribusi folder dari front-end
-frontend/build/
-frontend/dist/
-
-# macOS atau Windows specific files
+# ========================================
+# 🖼️ IMAGES / TEMP FILES
+# ========================================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.svg
+*.ico
+tmp/
+temp/
 .DS_Store
 Thumbs.db
+
+# ========================================
+# 🧪 IDE & EDITOR FILES
+# ========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# ========================================
+# 🚀 DEPLOYMENT
+# ========================================
+# File yang digunakan di server atau CI/CD, bukan untuk repo publik
+docker-compose.override.yml
+firebase-debug.log
