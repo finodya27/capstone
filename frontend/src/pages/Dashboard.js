@@ -141,14 +141,16 @@ const Dashboard = () => {
       <div className="bg-white shadow-sm rounded-xl border border-gray-200 mt-6">
         <FireAlerts alerts={fireAlerts} />
       </div>
-
       {/* GRID 3: Video Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        {/* KIRI → Thermal Camera */}
         <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
-          <VideoStream type="raw" />
+          <VideoStream type="thermal" />
         </div>
+
+        {/* KANAN → Fire Detection */}
         <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
-          <VideoStream type="detection" />
+          <VideoStream type="fire" />
         </div>
       </div>
 
