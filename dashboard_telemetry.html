@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Telemetry Dashboard — MAVLink WebSocket</title>
+
+  <!-- Leaflet (no integrity attribute to avoid blocking) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#9aa4b2;--accent:#2563eb;--glass:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,'Helvetica Neue',Arial}
+    body{background:linear-gradient(180deg,#071027 0%,#071634 100%);color:#e6eef6}
+    .app{display:grid;grid-template-columns:1fr 380px;gap:18px;padding:18px;height:100vh;box-sizing:border-box}
+    .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);overflow:hidden}
+    #map{height:100%;border-radius:10px}
+    .right{display:flex;flex-direction:column;gap:12px}
+    .panel{padding:10px;background:var(--glass);border-radius:10px}
+    h1{font-size:16px;margin:0 0 8px 0}
+    .row{display:flex;gap:8px;align-items:center}
+    .label{color:var(--muted);font-size:12px}
+    .value{font-size:18px;font-weight:600}
+    #attitudeCanvas{width:100%;height:160px;background:linear-gradient(180deg,#071427,#071a3a);border-radius:8px}
+    .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    #log{height:140px;overflow:auto;background:#020617;padding:8px;border-radius:8px;font-family:monospace;font-size:12px;color:#9fb2d9}
+    .small{font-size:12px;color:var(--muted)}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{background:var(--accent);color:white;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    input[type=text]{background:#071129;border:1px solid rgba(255,255,255,0.03);padding:6px;border-radius:8px;color:#e6eef6}
+    footer{position:fixed;left:18px;right:18px;bottom:18px;color:var(--muted);font-size:12px;text-align:center}
+    /* battery bar */
+    .battery {
+      height:18px;border-radius:6px;background:#062033;border:1px solid rgba(255,255,255,0.03);overflow:hidden;
+      display:flex;align-items:center;padding:2px 4px;
+    }
+    .battery-fill {height:100%;border-radius:4px;background:linear-gradient(90deg,#16a34a,#84cc16);width:0%;}
+    .battery-text{margin-left:8px;font-weight:600}
+    /* compass small */
+    #compass {width:100%;height:60px;background:#071427;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#9fb2d9;font-size:14px}
+    /* flight mode */
+    .mode {font-weight:700;color:#cbe6ff;background:rgba(255,255,255,0.02);padding:6px 8px;border-radius:8px;display:inline-block}
+    /* latency stats */
+    .latency-stats{display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:12px;color:var(--muted)}
+    .latency-stats .stat{background:rgba(255,255,255,0.02);padding:6px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="card">
+      <h1>Telemetry Map</h1>
+      <div id="map" style="height:calc(100% - 34px);min-height:520px"></div>
+    </div>
+
+    <div class="right">
+      <div class="card panel">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div>
+            <div class="small">WebSocket</div>
+            <div class="value" id="wsStatus">disconnected</div>
+          </div>
+          <div class="controls">
+            <input id="wsUrl" type="text" value="ws://127.0.0.1:8765" style="width:220px" />
+            <button id="connectBtn">Connect</button>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <div>
+            <div class="label">Flight Mode</div>
+            <div class="mode" id="mode">-</div>
+          </div>
+          <div>
+            <div class="label">Heading</div>
+            <div class="value" id="heading">-°</div>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="panel small">
+            <div class="label">Lat, Lon</div>
+            <div class="value" id="latlon">-</div>
+            <div class="small">Alt: <span id="alt">-</span> m</div>
+          </div>
+
+          <div class="panel small">
+            <div class="label">Battery</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="flex:1">
+                <div class="battery"><div id="batteryFill" class="battery-fill"></div></div>
+              </div>
+              <div class="battery-text" id="battery">- %</div>
+            </div>
+            <div class="small">Voltage: <span id="voltage">-</span> V</div>
+          </div>
+
+          <div class="panel small">
+            <div class="label">Speed</div>
+            <div class="value" id="speed">- m/s</div>
+            <div class="small">Climb: <span id="vz">-</span> m/s</div>
+          </div>
+
+          <div class="panel small">
+            <div class="label">GPS / Fix</div>
+            <div class="value" id="gpsFix">-</div>
+            <div class="small">Sats: <span id="sats">-</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card panel">
+        <h1>Attitude (Artificial Horizon)</h1>
+        <canvas id="attitudeCanvas" width="360" height="160"></canvas>
+        <div style="display:flex;justify-content:space-between;margin-top:8px">
+          <div class="small">Roll: <span id="roll">0</span>°</div>
+          <div class="small">Pitch: <span id="pitch">0</span>°</div>
+          <div class="small">Yaw: <span id="yaw">0</span>°</div>
+        </div>
+        <div style="margin-top:8px">
+          <div id="compass">Compass: <span id="compassVal">-</span>°</div>
+        </div>
+      </div>
+
+      <div class="card panel">
+        <h1>Telemetry Log</h1>
+
+        <div class="latency-stats">
+          <div class="stat">Avg: <span id="latAvg">-</span> ms</div>
+          <div class="stat">Min: <span id="latMin">-</span> ms</div>
+          <div class="stat">Max: <span id="latMax">-</span> ms</div>
+        </div>
+
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Dashboard local — connect ke <span id="footerWs">ws://127.0.0.1:8765</span> · Built for MAVProxy websocket telemetry</footer>
+
+  <!-- libs: Leaflet core + rotated marker plugin (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-rotatedmarker/0.2.0/leaflet.rotatedMarker.min.js"></script>
+
+  <script>
+    // ====== Config ======
+    let WS_URL = document.getElementById('wsUrl').value;
+
+    // ====== Map setup ======
+    const map = L.map('map', { zoomControl: true }).setView([0,0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
+    const droneIcon = L.icon({iconUrl: 'https://cdn-icons-png.flaticon.com/512/743/743007.png', iconSize:[36,36], iconAnchor:[18,18]});
+    // rotated marker plugin adds setRotationAngle method
+    let marker = L.marker([0,0], {icon: droneIcon, rotationAngle: 0}).addTo(map);
+    let path = L.polyline([], {color:'#29b6f6'}).addTo(map);
+    let autoCenter = true; // true until user pans map
+
+    map.on('movestart', () => { autoCenter = false; });
+
+    // ====== UI refs ======
+    const wsStatus = document.getElementById('wsStatus');
+    const connectBtn = document.getElementById('connectBtn');
+    const logEl = document.getElementById('log');
+    const latlonEl = document.getElementById('latlon');
+    const altEl = document.getElementById('alt');
+    const batteryEl = document.getElementById('battery');
+    const batteryFill = document.getElementById('batteryFill');
+    const voltageEl = document.getElementById('voltage');
+    const speedEl = document.getElementById('speed');
+    const vzEl = document.getElementById('vz');
+    const gpsFixEl = document.getElementById('gpsFix');
+    const satsEl = document.getElementById('sats');
+    const rollEl = document.getElementById('roll');
+    const pitchEl = document.getElementById('pitch');
+    const yawEl = document.getElementById('yaw');
+    const footerWs = document.getElementById('footerWs');
+    const headingEl = document.getElementById('heading');
+    const compassVal = document.getElementById('compassVal');
+    const modeEl = document.getElementById('mode');
+
+    const latAvgEl = document.getElementById('latAvg');
+    const latMinEl = document.getElementById('latMin');
+    const latMaxEl = document.getElementById('latMax');
+
+    footerWs.textContent = WS_URL;
+
+    // Attitude drawing
+    const attCanvas = document.getElementById('attitudeCanvas');
+    const attCtx = attCanvas.getContext('2d');
+    function drawAttitude(rollDeg=0, pitchDeg=0){
+      const w = attCanvas.width, h = attCanvas.height;
+      const roll = rollDeg * Math.PI/180;
+      const pitch = pitchDeg; // degrees
+      attCtx.clearRect(0,0,w,h);
+
+      // background sky and ground (centered)
+      attCtx.save();
+      attCtx.translate(w/2, h/2);
+      attCtx.rotate(-roll);
+
+      // sky
+      attCtx.fillStyle = '#1e90ff';
+      attCtx.fillRect(-w, -h*2 + pitch*2, w*2, h*2);
+      // ground
+      attCtx.fillStyle = '#8b5a2b';
+      attCtx.fillRect(-w, 0 + pitch*2, w*2, h*2);
+
+      // horizon line
+      attCtx.strokeStyle = '#fff';
+      attCtx.lineWidth = 2;
+      attCtx.beginPath();
+      attCtx.moveTo(-w, pitch*2);
+      attCtx.lineTo(w, pitch*2);
+      attCtx.stroke();
+
+      attCtx.restore();
+
+      // fixed aircraft symbol
+      attCtx.strokeStyle = '#fff';
+      attCtx.lineWidth = 3;
+      attCtx.beginPath();
+      attCtx.moveTo(w/2 - 40, h - 30);
+      attCtx.lineTo(w/2 + 40, h - 30);
+      attCtx.moveTo(w/2, h - 30);
+      attCtx.lineTo(w/2, h - 10);
+      attCtx.stroke();
+    }
+
+    // init
+    drawAttitude(0,0);
+
+    // WebSocket handling
+    let ws = null;
+    function appendLog(msg){
+      const el = document.createElement('div');
+      el.textContent = '['+new Date().toLocaleTimeString()+'] ' + msg;
+      logEl.prepend(el);
+      if(logEl.children.length>200) logEl.removeChild(logEl.lastChild);
+    }
+
+    // ===== Latency measurement variables =====
+    let lastMsgTime = performance.now();
+    const idealInterval = 100; // expected interval (ms) for 10 Hz
+    let latencySamples = []; // store last N samples for stats
+    const maxSamples = 200;
+
+    function updateLatencyStats(latMs){
+      // maintain sliding window
+      latencySamples.push(latMs);
+      if(latencySamples.length > maxSamples) latencySamples.shift();
+      // compute stats
+      const sum = latencySamples.reduce((a,b)=>a+b,0);
+      const avg = latencySamples.length ? (sum/latencySamples.length) : 0;
+      const min = latencySamples.length ? Math.min(...latencySamples) : 0;
+      const max = latencySamples.length ? Math.max(...latencySamples) : 0;
+      latAvgEl.textContent = avg.toFixed(2);
+      latMinEl.textContent = min.toFixed(2);
+      latMaxEl.textContent = max.toFixed(2);
+    }
+
+    function connect(url){
+      if(ws){ try{ ws.close(); }catch(e){} ws=null; }
+      WS_URL = url;
+      footerWs.textContent = WS_URL;
+      appendLog('Connecting to '+WS_URL+' ...');
+      try{
+        ws = new WebSocket(WS_URL);
+      }catch(e){ appendLog('Failed to create WebSocket: '+e.message); wsStatus.textContent='error'; return; }
+
+      ws.onopen = ()=>{ wsStatus.textContent='connected'; appendLog('Connected'); };
+      ws.onclose = (ev)=>{ wsStatus.textContent='disconnected'; appendLog('Disconnected (code:'+ev.code+')'); };
+      ws.onerror = (ev)=>{ wsStatus.textContent='error'; appendLog('WebSocket error'); };
+
+      ws.onmessage = (ev) => {
+        try {
+            const d = JSON.parse(ev.data);
+
+            // ===== LOG VALIDASI JSON (UNTUK 4.4.5) =====
+            console.log("JSON valid:", typeof d === "object");
+            console.log("msg_type:", d.msg_type);
+
+            // ===== LOG LATENSI (SUDAH ADA) =====
+            if (d._recv_ts) {
+                const nowEpoch = Date.now();
+                const mavTs = d._recv_ts * 1000;
+                const latencyReal = nowEpoch - mavTs;
+
+                console.log("LATENSI_REAL:", latencyReal.toFixed(2), "ms");
+                updateLatencyStats(latencyReal);
+                appendLog(`Latensi Riil: ${latencyReal.toFixed(2)} ms`);
+            }
+
+            handleMessage(d);
+
+        } catch (e) {
+            console.error("JSON parse error:", e);
+            appendLog('Bad JSON: ' + ev.data);
+        }
+      };
+    }
+    connectBtn.addEventListener('click', ()=>{
+      const url = document.getElementById('wsUrl').value.trim();
+      connect(url);
+    });
+
+    // helper conversions
+    function toDeg(radOrVal){
+      if (typeof radOrVal === 'number') {
+        // if value looks like radians (abs<2*pi)
+        if (Math.abs(radOrVal) <= Math.PI*2) return radOrVal * (180/Math.PI);
+        return radOrVal;
+      }
+      return Number(radOrVal) || 0;
+    }
+
+    // mapping for common ArduPilot custom_mode values (best-effort)
+    const flightModes = {
+      0: "STABILIZE",
+      1: "ACRO",
+      2: "ALT_HOLD",
+      3: "AUTO",
+      4: "GUIDED",
+      5: "LOITER",
+      6: "RTL",
+      7: "CIRCLE",
+      9: "LAND",
+      11: "DRIFT",
+      13: "SPORT",
+      14: "FLIP",
+      15: "AUTOTUNE",
+      16: "POSHOLD",
+      17: "BRAKE",
+      18: "THROW",
+      19: "AVOID_ADSB"
+    };
+
+    // state cache
+    let lastAlt = null;
+    let lastAltTs = null;
+    let lastGlobalPos = null;
+
+    function handleMessage(d){
+      // append small log preview (short)
+      appendLog(JSON.stringify(d).slice(0,200));
+
+      const t = d.msg_type || d.type || null;
+
+      // --- GPS_RAW_INT gives fix & sats ---
+      if (t === "GPS_RAW_INT") {
+        // fix_type: 0..6 (0 unknown, 3 = 3D)
+        const fixMap = {
+          0: "No Fix",
+          1: "No Fix",
+          2: "2D Fix",
+          3: "3D Fix",
+          4: "DGPS",
+          5: "RTK Float",
+          6: "RTK Fixed"
+        };
+        gpsFixEl.textContent = fixMap[d.fix_type] || (d.fix_type || "-");
+        satsEl.textContent = (d.satellites_visible !== null && d.satellites_visible !== undefined) ? d.satellites_visible : "-";
+      }
+
+      // --- GLOBAL_POSITION_INT gives lat/lon/alt & vx/vy/vz ---
+      if (t === "GLOBAL_POSITION_INT" || t === "GLOBAL_POSITION_INT_EXT") {
+        // lat/lon are in 1e7 (int)
+        let lat = null, lon = null;
+        if (d.lat !== undefined && d.lon !== undefined) {
+          lat = (Math.abs(d.lat) > 1e6) ? (d.lat / 1e7) : d.lat;
+          lon = (Math.abs(d.lon) > 1e6) ? (d.lon / 1e7) : d.lon;
+        }
+        // alt is in millimeters (msl) -> meters
+        const alt = (d.alt !== undefined && d.alt !== null) ? (d.alt/1000) : (d.relative_alt !== undefined && d.relative_alt !== null ? (d.relative_alt/1000) : null);
+
+        if (lat !== null && lon !== null) {
+          latlonEl.textContent = lat.toFixed(6)+', '+lon.toFixed(6);
+          altEl.textContent = alt !== null ? Number(alt).toFixed(2) : '-';
+          // update marker & path
+          marker.setLatLng([lat, lon]);
+          path.addLatLng([lat, lon]);
+          if (autoCenter) map.setView([lat, lon], Math.max(map.getZoom(), 15));
+          // compute climb if vz provided (cm/s -> m/s)
+          if (d.vz !== undefined && d.vz !== null) {
+            const climb = d.vz / 100; // cm/s -> m/s
+            vzEl.textContent = climb.toFixed(2);
+          } else {
+            // fallback: compute from alt/time
+            const nowTs = Date.now()/1000;
+            if (lastAlt !== null && alt !== null && lastAltTs) {
+              const dt = nowTs - lastAltTs;
+              if (dt > 0) {
+                const climb = (alt - lastAlt) / dt;
+                vzEl.textContent = climb.toFixed(2);
+              }
+            }
+            lastAlt = alt;
+            lastAltTs = nowTs;
+          }
+        }
+        // vx vy in cm/s -> m/s
+        if (d.vx !== undefined || d.vy !== undefined) {
+          const vx = (d.vx !== undefined && d.vx !== null) ? (d.vx/100) : 0;
+          const vy = (d.vy !== undefined && d.vy !== null) ? (d.vy/100) : 0;
+          const spd = Math.sqrt(vx*vx + vy*vy);
+          speedEl.textContent = spd.toFixed(2);
+        }
+      }
+
+      // --- VFR_HUD has groundspeed (m/s) and alt ---
+      if (t === "VFR_HUD") {
+        if (d.groundspeed !== undefined && d.groundspeed !== null) {
+          speedEl.textContent = Number(d.groundspeed).toFixed(2);
+        }
+        if (d.alt !== undefined && d.alt !== null) {
+          // alt here often in meters
+          altEl.textContent = Number(d.alt).toFixed(2);
+        }
+      }
+
+      // --- SYS_STATUS -> battery info ---
+      if (t === "SYS_STATUS") {
+        if (d.voltage_battery !== undefined && d.voltage_battery !== null) {
+          const v = (d.voltage_battery/1000) || d.voltage_battery;
+          voltageEl.textContent = v.toFixed(2);
+        }
+        if (d.battery_remaining !== undefined && d.battery_remaining !== null) {
+          const pct = Math.max(0, Math.min(100, Number(d.battery_remaining)));
+          batteryEl.textContent = pct.toFixed(0);
+          batteryFill.style.width = pct + "%";
+          // change battery color thresholds
+          if (pct > 60) batteryFill.style.background = "linear-gradient(90deg,#16a34a,#84cc16)";
+          else if (pct > 30) batteryFill.style.background = "linear-gradient(90deg,#f59e0b,#f97316)";
+          else batteryFill.style.background = "linear-gradient(90deg,#dc2626,#f43f5e)";
+        }
+      }
+
+      // --- ATTITUDE -> roll/pitch/yaw (radians) ---
+      if (t === "ATTITUDE") {
+        const rollDeg = toDeg(d.roll);
+        const pitchDeg = toDeg(d.pitch);
+        const yawDeg = toDeg(d.yaw);
+        rollEl.textContent = rollDeg.toFixed(1);
+        pitchEl.textContent = pitchDeg.toFixed(1);
+        yawEl.textContent = yawDeg.toFixed(1);
+        // update artificial horizon
+        drawAttitude(rollDeg, pitchDeg);
+        // update marker rotation and compass
+        try {
+          marker.setRotationAngle(yawDeg);
+        } catch(e) {}
+        headingEl.textContent = (Math.round(yawDeg) + "°");
+        compassVal.textContent = Math.round(yawDeg);
+      }
+
+      // --- HEARTBEAT -> mode (custom_mode) ---
+      if (t === "HEARTBEAT") {
+        // custom_mode is often a number mapping to flight modes (ArduPilot)
+        const cm = d.custom_mode;
+        const modeName = flightModes[cm] || ("mode:"+cm);
+        modeEl.textContent = modeName;
+      }
+    }
+
+    // auto-connect on load
+    window.addEventListener('load', ()=>{
+      connect(WS_URL);
+    });
+  </script>
+</body>
+</html>

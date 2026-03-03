@@ -156,32 +156,6 @@ const TelemetryPanel = ({ telemetryData }) => {
                     </div>
                 </div>
 
-                {/* Attitude */}
-                <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                    <div className="flex items-center space-x-2 mb-2">
-                        <div className="bg-indigo-100 p-1 rounded-full">
-                            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                            </svg>
-                        </div>
-                        <p className="text-sm font-medium text-gray-600">Attitude (R/P/Y)</p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                        <div className="text-center">
-                            <p className="text-gray-500">Roll</p>
-                            <p className="font-bold text-indigo-600">{toDegrees(attitude.roll)}°</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-gray-500">Pitch</p>
-                            <p className="font-bold text-indigo-600">{toDegrees(attitude.pitch)}°</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-gray-500">Yaw</p>
-                            <p className="font-bold text-indigo-600">{toDegrees(attitude.yaw)}°</p>
-                        </div>
-                    </div>
-                </div>
-
                 {/* GPS Status */}
                 <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-3">
@@ -197,19 +171,30 @@ const TelemetryPanel = ({ telemetryData }) => {
                     <div className="space-y-2 text-sm text-gray-600">
                         <div className="flex justify-between">
                             <span>Latitude:</span>
-                            <span className="font-mono text-gray-800">{gps.latitude ?? "N/A"}</span>
+                            <span className="font-mono text-gray-800">
+                                {telemetryData.latitude ?? "N/A"}
+                            </span>
                         </div>
+
                         <div className="flex justify-between">
                             <span>Longitude:</span>
-                            <span className="font-mono text-gray-800">{gps.longitude ?? "N/A"}</span>
+                            <span className="font-mono text-gray-800">
+                                {telemetryData.longitude ?? "N/A"}
+                            </span>
                         </div>
+
                         <div className="flex justify-between">
                             <span>Satellites:</span>
-                            <span className="font-mono text-gray-800">{gps.satellites_visible ?? "N/A"}</span>
+                            <span className="font-mono text-gray-800">
+                                {gps.satellites_visible ?? "N/A"}
+                            </span>
                         </div>
+
                         <div className="flex justify-between">
                             <span>Fix Type:</span>
-                            <span className="font-mono text-gray-800">{gps.fix_type ?? "N/A"}</span>
+                            <span className="font-mono text-gray-800">
+                                {gps.fix_type ?? "N/A"}
+                            </span>
                         </div>
                     </div>
                 </div>

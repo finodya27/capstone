@@ -14,46 +14,34 @@ pixhawk = PixhawkHelper(device="udp:127.0.0.1:14551", baud=57600)
 
 
 def get_sonar_range(telemetry):
-    """Mendapatkan jangkauan sonar atau fallback ke altitude jika sonar tidak tersedia."""
-    if "sonarrange" in telemetry:
-        return telemetry["sonarrange"]
-    # Gunakan 'altitude' dari PixhawkHelper.get_telemetry()
-    return telemetry.get("altitude", None)
+    return telemetry.get("sonar_range")
 
 
 def create_drone_data_from_pixhawk(telemetry):
-    """Mengkonversi dictionary telemetry dari Pixhawk menjadi objek DroneData."""
-    sonar_altitude = get_sonar_range(telemetry)
-
-    # Ambil data GPS dengan mempertimbangkan struktur PixhawkHelper
     gps_data = telemetry.get("gps", {})
-    
-    # Fallback untuk lat/lon/alt yang mungkin berada di root telemetry dari PixhawkHelper
-    latitude = gps_data.get("latitude") if gps_data.get("latitude") is not None else telemetry.get("latitude")
-    longitude = gps_data.get("longitude") if gps_data.get("longitude") is not None else telemetry.get("longitude")
-    gps_altitude = gps_data.get("altitude") if gps_data.get("altitude") is not None else telemetry.get("altitude")
 
+    latitude = telemetry.get("latitude") or gps_data.get("latitude")
+    longitude = telemetry.get("longitude") or gps_data.get("longitude")
+    gps_altitude = telemetry.get("altitude") or gps_data.get("altitude")
+
+    sonar_altitude = get_sonar_range(telemetry)
 
     return DroneData(
         battery=telemetry.get("battery"),
-        altitude=sonar_altitude,
+        altitude=gps_altitude,
+        sonar_range=sonar_altitude,
         heading=telemetry.get("heading"),
         airspeed=telemetry.get("airspeed"),
         groundspeed=telemetry.get("groundspeed"),
-        attitude={
-            "roll": telemetry["attitude"].get("roll"),
-            "pitch": telemetry["attitude"].get("pitch"),
-            "yaw": telemetry["attitude"].get("yaw"),
-        } if "attitude" in telemetry else {},
+        attitude=telemetry.get("attitude", {}),
         gps={
             "latitude": latitude,
             "longitude": longitude,
             "altitude": gps_altitude,
             "fix_type": gps_data.get("fix_type"),
             "satellites_visible": gps_data.get("satellites_visible"),
-        } if latitude is not None and longitude is not None else {},
-        qos=telemetry.get("qos", None),  # Ambil langsung dari telemetry yang sudah dihitung
-        fire_detected=False, 
+        },
+        fire_detected=False,
         temperature=None,
         wind_direction=None,
         timestamp=datetime.utcnow().isoformat()

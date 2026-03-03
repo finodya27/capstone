@@ -1,10 +1,11 @@
-// frontend/src/components/MapView.js
 import React, { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Konfigurasi ikon default Leaflet
+// ======================================================
+// FIX ICON
+// ======================================================
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png"),
@@ -12,35 +13,71 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
 });
 
-// Komponen untuk memastikan map auto-resize saat container berubah ukuran
+// ======================================================
+// Auto resize map
+// ======================================================
 const ResizeHandler = () => {
   const map = useMap();
   useEffect(() => {
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 300);
-    window.addEventListener("resize", () => map.invalidateSize());
-    return () => window.removeEventListener("resize", () => map.invalidateSize());
+    const resize = () => map.invalidateSize();
+    setTimeout(resize, 300);
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
   }, [map]);
   return null;
 };
 
+// ======================================================
+// Auto follow marker
+// ======================================================
+const FollowDrone = ({ lat, lng }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (lat && lng) {
+      map.setView([lat, lng], map.getZoom(), {
+        animate: true,
+      });
+    }
+  }, [lat, lng, map]);
+
+  return null;
+};
+
+// ======================================================
+// MAIN MAP COMPONENT
+// ======================================================
 const MapView = ({ telemetryData, fireAlerts }) => {
   const mapRef = useRef();
 
-  // Default posisi (misal Semarang)
   const defaultPosition = [-7.027623, 110.414056];
 
-  // Gunakan posisi drone jika ada GPS valid
-  const hasGps = telemetryData?.gps?.latitude && telemetryData?.gps?.longitude;
-  const centerPosition = hasGps
-    ? [telemetryData.gps.latitude, telemetryData.gps.longitude]
-    : defaultPosition;
+  // ✅ Ambil GPS dari 2 kemungkinan format
+  const lat =
+    telemetryData?.gps?.latitude ?? telemetryData?.latitude ?? null;
+  const lng =
+    telemetryData?.gps?.longitude ?? telemetryData?.longitude ?? null;
 
-  const zoomLevel = hasGps ? 15 : 13;
+  const hasGps = !!(lat && lng);
+
+  const centerPosition = hasGps ? [lat, lng] : defaultPosition;
+  const zoomLevel = hasGps ? 16 : 13;
+
+  const source = telemetryData?.source ?? "unknown";
+  const isLive = source === "pixhawk";
 
   return (
-    <div className="w-full h-full flex-1 min-h-[500px]">
+    <div className="w-full h-full flex-1 min-h-[500px] relative">
+      {/* Status Badge */}
+      <div className="absolute top-3 left-3 z-[1000] bg-white rounded-xl shadow-md px-4 py-2 text-sm font-bold flex items-center gap-2">
+        <span
+          className={`w-3 h-3 rounded-full ${
+            isLive ? "bg-green-500" : "bg-orange-500"
+          }`}
+        />
+        {isLive ? "LIVE - Pixhawk" : "OFFLINE - Firebase"}
+      </div>
+
       <MapContainer
         center={centerPosition}
         zoom={zoomLevel}
@@ -49,109 +86,106 @@ const MapView = ({ telemetryData, fireAlerts }) => {
         scrollWheelZoom={true}
       >
         <ResizeHandler />
+        {hasGps && <FollowDrone lat={lat} lng={lng} />}
+
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
         />
 
-        {/* Marker posisi drone */}
+        {/* ================= Drone Marker ================= */}
         {hasGps && (
-          <Marker position={centerPosition}>
+          <Marker position={[lat, lng]}>
             <Popup>
               <div className="text-center">
                 <b className="text-blue-600">🚁 Drone Location</b>
                 <br />
+
                 <span className="text-sm text-gray-600">
-                  GPS: {telemetryData.gps.latitude.toFixed(6)},{" "}
-                  {telemetryData.gps.longitude.toFixed(6)}
+                  GPS: {lat.toFixed(6)}, {lng.toFixed(6)}
                 </span>
+
                 <br />
                 <span className="text-sm">
                   Battery:{" "}
                   <span
                     className={`font-semibold ${
-                      telemetryData.battery > 60
+                      telemetryData?.battery > 60
                         ? "text-green-600"
-                        : telemetryData.battery > 30
+                        : telemetryData?.battery > 30
                         ? "text-yellow-600"
                         : "text-red-600"
                     }`}
                   >
-                    {telemetryData.battery ?? "N/A"}%
+                    {telemetryData?.battery ?? "N/A"}%
                   </span>
                 </span>
+
                 <br />
                 <span className="text-sm text-gray-600">
-                  Altitude: {telemetryData.altitude ?? "N/A"}m
+                  Altitude: {telemetryData?.altitude ?? "N/A"} m
+                </span>
+
+                <br />
+                <span className="text-xs text-gray-500">
+                  Source: {source}
                 </span>
               </div>
             </Popup>
           </Marker>
         )}
 
-        {/* Marker laporan kebakaran */}
+        {/* ================= Fire Markers ================= */}
         {(fireAlerts ?? []).map((alert, index) =>
-          alert.location &&
-          alert.location.latitude &&
-          alert.location.longitude ? (
+          alert?.location?.latitude && alert?.location?.longitude ? (
             <Marker
               key={alert.id || index}
-              position={[alert.location.latitude, alert.location.longitude]}
+              position={[
+                alert.location.latitude,
+                alert.location.longitude,
+              ]}
             >
               <Popup>
                 <div className="text-center">
                   <div className="flex items-center justify-center mb-2">
                     <span className="text-xl">🔥</span>
-                    <b className="ml-2 text-red-600">Fire Detected!</b>
+                    <b className="ml-2 text-red-600">
+                      Fire Detected!
+                    </b>
                   </div>
+
                   <div className="text-sm space-y-1">
                     <div>
-                      <span className="font-medium text-gray-600">Time:</span>
+                      <b>Time:</b>
                       <br />
-                      <span className="text-gray-800">
-                        {alert.timestamp
-                          ? new Date(alert.timestamp).toLocaleString("id-ID")
-                          : "N/A"}
-                      </span>
+                      {alert.timestamp
+                        ? new Date(alert.timestamp).toLocaleString(
+                            "id-ID"
+                          )
+                        : "N/A"}
                     </div>
+
                     {alert.severity && (
                       <div>
-                        <span className="font-medium text-gray-600">
-                          Severity:
-                        </span>
+                        <b>Severity:</b>
                         <br />
-                        <span
-                          className={`inline-block px-2 py-1 rounded text-xs font-bold uppercase ${
-                            alert.severity.toLowerCase() === "critical"
-                              ? "bg-red-500 text-white"
-                              : alert.severity.toLowerCase() === "high"
-                              ? "bg-orange-500 text-white"
-                              : alert.severity.toLowerCase() === "medium"
-                              ? "bg-yellow-500 text-white"
-                              : "bg-gray-500 text-white"
-                          }`}
-                        >
+                        <span className="inline-block px-2 py-1 rounded text-xs font-bold bg-red-500 text-white">
                           {alert.severity}
                         </span>
                       </div>
                     )}
+
                     {alert.confidence && (
                       <div>
-                        <span className="font-medium text-gray-600">
-                          Confidence:
-                        </span>
+                        <b>Confidence:</b>
                         <br />
-                        <span className="text-gray-800">
-                          {alert.confidence}%
-                        </span>
+                        {alert.confidence}%
                       </div>
                     )}
-                    <div className="pt-2 border-t">
-                      <span className="text-xs text-gray-500">
-                        Coordinates:{" "}
-                        {alert.location.latitude.toFixed(6)},{" "}
-                        {alert.location.longitude.toFixed(6)}
-                      </span>
+
+                    <div className="pt-2 border-t text-xs text-gray-500">
+                      {alert.location.latitude.toFixed(6)},{" "}
+                      {alert.location.longitude.toFixed(6)}
                     </div>
                   </div>
                 </div>

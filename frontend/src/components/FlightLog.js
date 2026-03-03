@@ -1,17 +1,52 @@
 // frontend/src/components/FlightLog.js
 import React, { useState, useEffect } from "react";
+import { io } from "socket.io-client";
+
+const SOCKET_URL = "http://127.0.0.1:5000";
 
 const FlightLog = ({ telemetryData }) => {
   const [logs, setLogs] = useState([]);
+  const [isDroneConnected, setIsDroneConnected] = useState(false);
 
-  // Fungsi untuk menambah log baru
+  // Fungsi menambah log baru
   const addLog = (message) => {
     const timestamp = new Date().toLocaleTimeString("id-ID", { hour12: false });
-    setLogs((prev) => [{ time: timestamp, msg: message }, ...prev.slice(0, 49)]);
+    setLogs((prev) => [{ time: timestamp, msg: message }, ...prev.slice(0, 199)]);
   };
 
-  // Simulasi data hybrid (kalau belum ada koneksi drone)
+  // ============================
+  // SOCKET.IO - Update Log MAVLink
+  // ============================
   useEffect(() => {
+    const socket = io(SOCKET_URL, {
+      transports: ["websocket"],
+      reconnection: true,
+    });
+
+    // Terima log human-readable dari backend
+    socket.on("flight_log", (data) => {
+      if (data?.msg) {
+        setIsDroneConnected(true); // ada pesan → drone dianggap aktif
+        addLog(data.msg);
+      }
+    });
+
+    // Jika Pixhawk kirim telemetri, set connected
+    socket.on("telemetry", () => {
+      setIsDroneConnected(true);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  // ============================
+  // SIMULASI HYBRID — hanya aktif jika drone belum terhubung
+  // ============================
+  useEffect(() => {
+    if (isDroneConnected) return; // matikan simulasi kalau drone aktif
+
     const hybridLogs = [
       "🟢 System initialized",
       "🔄 Checking GPS connection...",
@@ -29,11 +64,15 @@ const FlightLog = ({ telemetryData }) => {
 
     let i = 0;
     const interval = setInterval(() => {
+      if (isDroneConnected) {
+        clearInterval(interval);
+        return;
+      }
+
       if (i < hybridLogs.length) {
         addLog(hybridLogs[i]);
         i++;
       } else {
-        // Setelah selesai, loop terus dengan status random
         const random = [
           `⚡ Battery: ${(Math.random() * 100).toFixed(0)}%`,
           `📡 GPS: ${(Math.random() * 15).toFixed(0)} satellites`,
@@ -46,18 +85,15 @@ const FlightLog = ({ telemetryData }) => {
     }, 2500);
 
     return () => clearInterval(interval);
-  }, []);
-
-  // Kalau nanti sudah terkoneksi drone, bisa ubah jadi:
-  // useEffect(() => {
-  //   if (telemetryData) addLog(`Telemetry update: ${JSON.stringify(telemetryData)}`);
-  // }, [telemetryData]);
+  }, [isDroneConnected]);
 
   return (
     <div className="bg-white rounded-xl shadow-md border border-gray-200 mt-6 overflow-hidden">
       <div className="bg-blue-600 text-white px-4 py-2 flex items-center justify-between">
         <h2 className="text-lg font-semibold">🧾 Flight Log</h2>
-        <span className="text-xs opacity-80">Real-time Monitor</span>
+        <span className="text-xs opacity-80">
+          {isDroneConnected ? "Realtime from Pixhawk" : "Simulator Mode"}
+        </span>
       </div>
 
       <div className="h-64 overflow-y-auto font-mono text-sm bg-gray-50 p-4">

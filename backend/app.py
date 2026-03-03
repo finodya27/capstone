@@ -50,8 +50,8 @@ from backend.api.reports import reports_blueprint
 from backend.api.auth import auth_blueprint
 from backend.api.user import user_blueprint
 from backend.api.video import video_blueprint
-from backend.api.servo import servo_api
 from backend.api.fire_detection_sync import fire_sync_blueprint
+from backend.api.sensors_environment import sensor_env_api
 
 # Register semua blueprint
 app.register_blueprint(telemetry_blueprint, url_prefix="/api")
@@ -59,9 +59,8 @@ app.register_blueprint(reports_blueprint, url_prefix="/api")
 app.register_blueprint(auth_blueprint, url_prefix="/api/auth")
 app.register_blueprint(user_blueprint, url_prefix="/api/user")
 app.register_blueprint(video_blueprint, url_prefix="/api/video")
-app.register_blueprint(servo_api, url_prefix="/api")
 app.register_blueprint(fire_sync_blueprint, url_prefix="/api")
-
+app.register_blueprint(sensor_env_api, url_prefix="/api")
 # =====================================================
 # Routes Utama
 # =====================================================
@@ -124,30 +123,38 @@ socketio.start_background_task(telemetry_background_task)
 # =====================================================
 # Background Task 2 → Auto-save Telemetry ke Firebase
 # =====================================================
-FIREBASE_SAVE_INTERVAL = 60  # detik
+FIREBASE_SAVE_INTERVAL = 10  # detik
 
 def firebase_autosave_task():
-    """Simpan data Pixhawk ke Realtime Database tiap 60 detik."""
+    """Simpan data Pixhawk ke Realtime Database tiap 10 detik."""
     while True:
         try:
             time.sleep(FIREBASE_SAVE_INTERVAL)
+
             if pixhawk and pixhawk.vehicle:
                 telemetry = pixhawk.get_telemetry()
+
                 if telemetry and telemetry.get("source") == "pixhawk":
-                    # ⚙️ Buang field QoS supaya tidak error di constructor
-                    telemetry_no_qos = {k: v for k, v in telemetry.items() if k != "qos"}
+
+                    # ⚙️ Buang field QoS supaya tidak error di DroneData()
+                    telemetry_no_qos = {
+                        k: v for k, v in telemetry.items()
+                        if k != "qos"  # Hapus qos karena tidak ada di DroneData
+                    }
+
+                    # Buat objek DroneData tanpa qos
                     drone_data = create_drone_data_from_pixhawk(telemetry_no_qos)
 
                     ref = db.reference("/drone_data")
                     ref.push().set(drone_data.to_dict())
+
                     print(f"✅ Auto-save Pixhawk data: {datetime.now().isoformat()}")
+
                 else:
                     print("ⓘ Pixhawk tidak aktif, skip auto-save.")
         except Exception as e:
             print(f"⚠️ Error di background auto-save Firebase: {e}")
             time.sleep(5)
-
-socketio.start_background_task(firebase_autosave_task)
 
 # =====================================================
 # Background Task 3 → Sinkronisasi Fire Detection (Firestore -> RealtimeDB)

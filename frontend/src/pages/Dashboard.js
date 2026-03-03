@@ -1,10 +1,12 @@
 // frontend/src/pages/Dashboard.js
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { io } from "socket.io-client";
 import Layout from "../components/Layout";
 import MapView from "../components/MapView";
 import TelemetryPanel from "../components/TelemetryPanel";
 import SensorPanel from "../components/SensorPanel";
+import AttitudePanel from "../components/AttitudePanel";
 import FireAlerts from "../components/FireAlerts";
 import VideoStream from "../components/VideoStream";
 import FlightLog from "../components/FlightLog";
@@ -22,6 +24,7 @@ const Dashboard = () => {
     navigate("/");
   };
 
+  // ========= POLLING FALLBACK UNTUK PERTAMA KALI =========
   const fetchTelemetryData = async () => {
     try {
       const res = await api.get("/telemetry/latest");
@@ -31,21 +34,21 @@ const Dashboard = () => {
     }
   };
 
-  const fetchSensorData = async () => {
-    try {
-      const res = await api.get("/sensors/latest");
-      setSensorData(res.data.data);
-    } catch {
-      setSensorData({
-        humidity: 48,
-        distance: 120,
-        temperature: 26,
-        windDirection: 215,
-        windSpeed: 8,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  };
+const fetchSensorData = async () => {
+  try {
+    const res = await api.get("/sensors-env/latest");
+    setSensorData(res.data);
+  } catch (err) {
+    console.warn("⚠️ Sensor env unavailable, using fallback.");
+
+    setSensorData({
+      humidity: 48,
+      temperature: 26,
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
 
   const fetchFireAlerts = async () => {
     try {
@@ -65,8 +68,9 @@ const Dashboard = () => {
     }
   };
 
+  // ========= SETUP SOCKET.IO (REAL-TIME TELEMETRY) =========
   useEffect(() => {
-    const load = async () => {
+    const loadInitial = async () => {
       await Promise.all([
         fetchTelemetryData(),
         fetchSensorData(),
@@ -74,17 +78,40 @@ const Dashboard = () => {
       ]);
       setIsLoading(false);
     };
-    load();
 
+    loadInitial();
+
+    // 🔥 REAL-TIME Telemetry dari Socket.IO
+    const socket = io("http://127.0.0.1:5000", {
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => {
+      console.log("🔌 Socket.IO terhubung ke backend");
+    });
+
+    socket.on("telemetry", (data) => {
+      // ⏱ update setiap ~0.5 detik
+      setTelemetryData(data);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("⚠️ Socket.IO terputus");
+    });
+
+    // Polling untuk sensor & fire setiap 5 detik
     const interval = setInterval(() => {
-      fetchTelemetryData();
       fetchSensorData();
       fetchFireAlerts();
-    }, 10000);
+    }, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
+  // ========== LOADING SCREEN ==========
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-200">
@@ -97,6 +124,7 @@ const Dashboard = () => {
     );
   }
 
+  // ============= MAIN DASHBOARD =============
   return (
     <Layout
       pageTitle="Dashboard"
@@ -109,7 +137,8 @@ const Dashboard = () => {
           className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6"
           role="alert"
         >
-          <strong className="font-semibold">Perhatian:</strong> Data telemetry belum tersedia — menggunakan fallback data.
+          <strong className="font-semibold">Perhatian:</strong> 
+          Pixhawk belum terhubung — menggunakan fallback Firebase.
         </div>
       )}
 
@@ -129,11 +158,22 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Sensor */}
-        <div className="xl:col-span-3 h-full flex">
-          <div className="bg-white shadow-sm rounded-xl border border-gray-200 w-full flex-1">
+        {/* Sensor + Attitude */}
+        <div className="xl:col-span-3 h-full flex flex-col gap-6">
+          <div className="bg-white shadow-sm rounded-xl border border-gray-200 w-full">
             <SensorPanel sensorData={sensorData} />
           </div>
+
+          {telemetryData?.attitude && (
+            <div className="bg-white shadow-sm rounded-xl border border-gray-200 w-full p-2">
+              <AttitudePanel 
+                attitude={telemetryData.attitude}
+                airspeed={telemetryData.airspeed}
+                groundspeed={telemetryData.groundspeed}
+                altitude={telemetryData.altitude}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -141,23 +181,25 @@ const Dashboard = () => {
       <div className="bg-white shadow-sm rounded-xl border border-gray-200 mt-6">
         <FireAlerts alerts={fireAlerts} />
       </div>
+
       {/* GRID 3: Video Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* KIRI → Thermal Camera */}
-        <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
-          <VideoStream type="thermal" />
-        </div>
 
-        {/* KANAN → Fire Detection */}
+        {/* Fire Detection Camera */}
         <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
           <VideoStream type="fire" />
+        </div>
+
+        {/* External Stream */}
+        <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
+          <VideoStream type="external" />
         </div>
       </div>
 
       {/* GRID 4: Flight Log */}
-        <div className="mt-6">
-            <FlightLog telemetryData={telemetryData} />
-        </div>
+      <div className="mt-6">
+        <FlightLog telemetryData={telemetryData} />
+      </div>
 
     </Layout>
   );
